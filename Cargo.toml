@@ -10,3 +10,6 @@ rand = "*"
 rand_distr = "*"
 ron = "*"
 serde = "*"
+
+[dev-dependencies]
+approx = "*"
