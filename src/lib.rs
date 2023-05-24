@@ -9,6 +9,8 @@
 use rand::Rng;
 use rand_distr::{ Distribution, WeightedAliasIndex, weighted_alias::AliasableWeight };
 
+pub mod presets;
+
 
 
 /// Weighted list of singular names. Use if you don't need full names for your game (e.g. only a
