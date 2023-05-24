@@ -7,7 +7,7 @@
 //! case I ever need to change game engines.
 
 use rand::Rng;
-use rand_distr::{WeightedAliasIndex, weighted_alias::AliasableWeight, Distribution};
+use rand_distr::{ Distribution, WeightedAliasIndex, weighted_alias::AliasableWeight };
 
 
 
@@ -17,65 +17,43 @@ pub struct WeightedNameList<S, W>
 where W: AliasableWeight
 {
 	names: Vec<S>,
-	weights: Vec<W>,
+	weights: WeightedAliasIndex<W>,
 }
 
 impl<S, W> WeightedNameList<S, W>
 where W: AliasableWeight
 {
-	/// Inserts a name/weight pair into an existing
-	pub fn insert(&mut self, name: S, weight: W)
+	pub fn new(names: Vec<S>, weights: Vec<W>) -> Self
 	{
-		self.names.push(name);
-		self.weights.push(weight);
-	}
-
-	/// Adds a name to the list, with the given weight
-	pub fn with_entry(mut self, name: S, weight: W) -> Self
-	{
-		self.insert(name, weight);
-		self
+		Self {
+			names,
+			weights: WeightedAliasIndex::new(weights).unwrap()
+		}
 	}
 
 	/// Samples a single random entry from the list.
-	/// 
-	/// If more than 1 name needs to be generated at a time, [`sample_batch`](WeightedNameList::sample_batch)
-	/// should be used over this function as it will run significantly faster than calling `sample`
-	/// multiple times in a row.
 	pub fn sample<R>(&self, rng: &mut R) -> &S
 	where R: Rng + ?Sized
 	{
-		let aliased_weights = WeightedAliasIndex::new(self.weights.clone()).unwrap();
-		&self.names[aliased_weights.sample(rng)]
-	}
-
-	/// Samples multiple names from the list in one call, returning them in a vector.
-	/// 
-	/// If more than 1 name needs to be generated at a time, this function should be used over
-	/// [`sample`](WeightedNameList::sample) as it will run significantly faster.
-	pub fn sample_batch<R>(&self, rng: &mut R, count: usize) -> Vec<&S>
-	where R: Rng + ?Sized
-	{
-		let weights_index = WeightedAliasIndex::new(self.weights.clone()).unwrap();
-		let mut names = Vec::new();
-		for _ in 0..count
-		{
-			let index = weights_index.sample(rng);
-			let name = &self.names[index];
-			names.push(name);
-		}
-		names
+		&self.names[self.weights.sample(rng)]
 	}
 }
 
-impl<S, W> Default for WeightedNameList<S, W>
-where W: AliasableWeight
+impl<R, S, W> From<Vec<(R, W)>> for WeightedNameList<S, W>
+where R: Into<S>, S: Clone, W: AliasableWeight
 {
-	fn default() -> Self
-	{
-		Self { names: Vec::default(), weights: Vec::default() }
+	fn from(value: Vec<(R, W)>) -> Self {
+		let mut name_vec = vec![];
+		let mut weight_vec = vec![];
+		for (name, weight) in value
+		{
+			name_vec.push(name.into());
+			weight_vec.push(weight);
+		}
+		Self::new(name_vec, weight_vec)
 	}
 }
+
 
 
 #[cfg(test)]
@@ -89,36 +67,16 @@ mod tests
 	const EPSILON: f32 = 0.2;
 
 	#[test]
-	fn test_sample()
+	fn test_single_sample()
 	{
 		let mut rng = thread_rng();
-		let name_list = WeightedNameList::<String, f32>::default()
-			.with_entry(String::from("Foo"), 2.0)
-			.with_entry(String::from("Bar"), 1.0);
+		let test_data = vec![("Foo", 2), ("Bar", 1)];
+		let name_list = WeightedNameList::<String, usize>::from(test_data);
 		let mut count_foo = 0;
 		let mut count_bar = 0;
 		for _ in 0..NAME_COUNT
 		{
 			let name = name_list.sample(&mut rng);
-			if name == &String::from("Foo") { count_foo += 1; }
-			else if name == &String::from("Bar") { count_bar += 1; }
-			else { panic!("Expected name to be either \"Foo\" or \"Bar\", but \"{}\" was returned", name); }
-		}
-		assert_ulps_eq!(2.0, count_foo as f32 / count_bar as f32, epsilon=EPSILON);
-	}
-
-	#[test]
-	fn test_sample_batch()
-	{
-		let mut rng = thread_rng();
-		let name_list = WeightedNameList::<String, f32>::default()
-			.with_entry(String::from("Foo"), 2.0)
-			.with_entry(String::from("Bar"), 1.0);
-		let mut count_foo = 0;
-		let mut count_bar = 0;
-		let names = name_list.sample_batch(&mut rng, NAME_COUNT);
-		for name in names
-		{
 			if name == &String::from("Foo") { count_foo += 1; }
 			else if name == &String::from("Bar") { count_bar += 1; }
 			else { panic!("Expected name to be either \"Foo\" or \"Bar\", but \"{}\" was returned", name); }
