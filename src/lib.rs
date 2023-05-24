@@ -81,6 +81,45 @@ where R: Into<S>, S: Clone, W: AliasableWeight
 
 
 
+pub struct WeightedFullNameList<S, W>
+where W: AliasableWeight
+{
+	given_names: WeightedNameList<S, W>,
+	family_names: WeightedNameList<S, W>,
+}
+
+impl<S, W> WeightedFullNameList<S, W>
+where W: AliasableWeight
+{
+	/// Creates a new instance with the provided name lists
+	pub fn new(given_names: WeightedNameList<S, W>, family_names: WeightedNameList<S, W>) -> Self
+	{
+		Self { given_names, family_names }
+	}
+
+	/// Samples a random full name from the lists, returning a tuple with a given name and family
+	/// name, in that order.
+	/// 
+	/// ```
+	/// # use rand::thread_rng;
+	/// # use namegen::{WeightedNameList, WeightedFullNameList};
+	/// let given_names: WeightedNameList<String, usize> = WeightedNameList::from(vec![("Foo", 1)]);
+	/// let family_names: WeightedNameList<String, usize> = WeightedNameList::from(vec![("Bar", 1)]);
+	/// let name_list = WeightedFullNameList::new(given_names, family_names);
+	/// let mut rng = thread_rng();
+	/// let (given_name, family_name) = name_list.sample(&mut rng);
+	/// assert_eq!("Foo", given_name);
+	/// assert_eq!("Bar", family_name);
+	/// ```
+	pub fn sample<R>(&self, rng: &mut R) -> (&S, &S)
+	where R: Rng + ?Sized
+	{
+		(self.given_names.sample(rng), self.family_names.sample(rng))
+	}
+}
+
+
+
 #[cfg(test)]
 mod tests
 {
@@ -142,6 +181,52 @@ mod tests
 			let test_data_names = vec!["Foo", "Bar", "Baz"];
 			let test_data_weights = vec![1, 2, 3, 4];
 			let _result: WeightedNameList<String, usize> = WeightedNameList::from((test_data_names, test_data_weights));
+		}
+	}
+
+
+	mod full_name
+	{
+		use super::*;
+		use std::collections::HashMap;
+
+		/// Tests that the sampled names occur at the frequency expected with the provided weights
+		#[test]
+		fn sample()
+		{
+			let given_names = vec![("Foo", 2), ("Bar", 1)];
+			let family_names = vec![("Baz", 3), ("Buzz", 2)];
+			let given_name_set = WeightedNameList::from(given_names);
+			let family_name_set = WeightedNameList::from(family_names);
+			let name_set: WeightedFullNameList<String, usize> = WeightedFullNameList::new(given_name_set, family_name_set);
+			let mut names_count: HashMap<String, usize> = HashMap::new();
+			let mut rng = thread_rng();
+			for _ in 0..NAME_COUNT
+			{
+				let (given_name, family_name) = name_set.sample(&mut rng);
+
+				if let Some(count) = names_count.get_mut(given_name)
+				{
+					*count += 1;
+				} else {
+					names_count.insert(given_name.to_string(), 0);
+				}
+
+				if let Some(count) = names_count.get_mut(family_name)
+				{
+					*count += 1;
+				} else {
+					names_count.insert(family_name.to_string(), 0);
+				}
+			}
+			assert_ulps_eq!(
+				2.0, names_count["Foo"] as f32 / names_count["Bar"] as f32,
+				epsilon = EPSILON,
+			);
+			assert_ulps_eq!(
+				3.0 / 2.0, names_count["Baz"] as f32 / names_count["Buzz"] as f32,
+				epsilon = EPSILON,
+			);
 		}
 	}
 }
